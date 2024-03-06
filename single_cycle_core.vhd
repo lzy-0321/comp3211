@@ -26,10 +26,6 @@
 --        # format:  | opcode = 8 |  rs  |  rt  |   rd   |
 --
 --
---     BE   rs, rt, imme
---        # if same PC = PC+2+imme, if not same PC=PC+2
---        # format:  | opcode = 2 |  rs  |  rt  |  imm  |
-
 -- Copyright (C) 2006 by Lih Wen Koh (lwkoh@cse.unsw.edu.au)
 -- All Rights Reserved. 
 --
@@ -91,16 +87,13 @@ component mux_2to1_16b is
            data_out   : out std_logic_vector(15 downto 0) );
 end component;
 
--- add control path here
 component control_unit is
     port ( opcode     : in  std_logic_vector(3 downto 0);
            reg_dst    : out std_logic;
            reg_write  : out std_logic;
            alu_src    : out std_logic;
            mem_write  : out std_logic;
-           mem_to_reg : out std_logic;
-           branch_on_equal : out std_logic 
-           );
+           mem_to_reg : out std_logic );
 end component;
 
 component register_file is
@@ -135,16 +128,7 @@ component data_memory is
            write_enable : in  std_logic;
            write_data   : in  std_logic_vector(15 downto 0);
            addr_in      : in  std_logic_vector(3 downto 0);
-           data_out     : out std_logic_vector(15 downto 0));
-end component;
-
----add Branch-on-equal
-component instruction_BE is
-    Port (
-        data_a : in std_logic_vector(15 downto 0);
-        data_b : in std_logic_vector(15 downto 0);
-        equal : out std_logic
-    );
+           data_out     : out std_logic_vector(15 downto 0) );
 end component;
 
 signal sig_next_pc              : std_logic_vector(3 downto 0);
@@ -167,31 +151,20 @@ signal sig_alu_result           : std_logic_vector(15 downto 0);
 signal sig_alu_carry_out        : std_logic;
 signal sig_data_mem_out         : std_logic_vector(15 downto 0);
 
---branch_on_equal
-signal sig_next_pc_temp         : std_logic_vector(3 downto 0);
-signal sig_next_pc_temp_2       : std_logic_vector(3 downto 0);
-signal sig_next_pc_imme_temp    : std_logic_vector(3 downto 0);
-signal BE_result                : std_logic;
-signal sig_BE                   : std_logic;
-signal sig_BE_MUX               : std_logic;
-
-
-
 begin
 
     sig_one_4b <= "0001";
-    sig_BE_MUX <= BE_result and sig_BE;  -- when both '1' MUX select 1, then select 0
 
     pc : program_counter
     port map ( reset    => reset,
                clk      => clk,
-               addr_in  => sig_next_pc_temp,
+               addr_in  => sig_next_pc,
                addr_out => sig_curr_pc ); 
 
     next_pc : adder_4b 
     port map ( src_a     => sig_curr_pc, 
                src_b     => sig_one_4b,
-               sum       => sig_next_pc_temp,   
+               sum       => sig_next_pc,   
                carry_out => sig_pc_carry_out );
     
     insn_mem : instruction_memory 
@@ -204,16 +177,13 @@ begin
     port map ( data_in  => sig_insn(3 downto 0),
                data_out => sig_sign_extended_offset );
 
-    -- add control path here
     ctrl_unit : control_unit 
     port map ( opcode     => sig_insn(15 downto 12),
                reg_dst    => sig_reg_dst,
                reg_write  => sig_reg_write,
                alu_src    => sig_alu_src,
                mem_write  => sig_mem_write,
-               mem_to_reg => sig_mem_to_reg,
-               branch_on_equal => sig_BE
-               );
+               mem_to_reg => sig_mem_to_reg );
 
     mux_reg_dst : mux_2to1_4b 
     port map ( mux_select => sig_reg_dst,
@@ -257,38 +227,5 @@ begin
                data_a     => sig_alu_result,
                data_b     => sig_data_mem_out,
                data_out   => sig_write_data );
-               
--- add here
-    next_pc_2 : adder_4b -- next pc will be 2
-    port map ( src_a     => sig_next_pc_temp, 
-               src_b     => "0001",
-               sum       => sig_next_pc_temp_2,   
-               carry_out => sig_pc_carry_out );
-               
-    pc_select :  mux_2to1_4b
-    port map( mux_select    => sig_BE,
-              data_a        => sig_next_pc_temp, --PC=1, mux_select = "0"
-              data_b        => sig_next_pc_temp_2, --PC=PC+2, muc_select = "1"
-              data_out      => sig_next_pc);
-               
-    BE : instruction_BE
-    port map ( data_a   => sig_read_data_a,
-               data_b   => sig_read_data_b,
-               equal   => BE_result);
-               
-    pc_2ADDimme_BE : adder_4b 
-    port map ( src_a     => sig_next_pc_temp_2,
-               src_b     => sig_insn(3 downto 0),
-               sum       => sig_next_pc_imme_temp,   
-               carry_out => sig_pc_carry_out );
-    
-    next_pc_BE :  mux_2to1_4b
-    port map( mux_select    => sig_BE_MUX,
-              data_a        => sig_next_pc_temp_2, --PC=PC+2, mux_select = "0"
-              data_b        => sig_next_pc_imme_temp, --PC=PC+2+imm, muc_select = "1"
-              data_out      => sig_next_pc);
-              
 
-    
-    
 end structural;
